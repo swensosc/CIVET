@@ -107,6 +107,18 @@ class CivetGUI(pg.GraphicsWindow):
         self.doAutoScaleUpdateXY = False
         self.doTSDecomposition = False
 
+        self.tsPenWidth = 2
+        self.coastPenWidth = 1.5
+        self.riverPenWidth = 1.5
+        self.countryPenWidth = 1.0
+        self.statePenWidth = 1.0
+
+        self.tsPenColor = (0,0,0)
+        self.coastPenColor = (0,0,0)
+        self.riverPenColor = (0,0,0)
+        self.countryPenColor = (0,0,0)
+        self.statePenColor = (255,0,0)
+
     def WhatIsACivet(self):
         # a window created in the function closes after function call
         #self.wiac_window = pg.GraphicsWindow()
@@ -696,28 +708,36 @@ class CivetGUI(pg.GraphicsWindow):
         lonbounds=np.asarray((self.westLon,self.eastLon),dtype=np.float)
         latbounds=np.asarray((self.southLat,self.northLat),dtype=np.float)
         libcivet.plot_coastlines_nc(self.map_overplot_coasts,
-                                center='Dateline',pen=(0,0,0),
+                                center='Dateline',
+                                pen=pg.mkPen(self.coastPenColor,
+                                width=self.coastPenWidth),
                                 xbounds=lonbounds,ybounds=latbounds)
 
     def plot_rivers(self):
         lonbounds=np.asarray((self.westLon,self.eastLon),dtype=np.float)
         latbounds=np.asarray((self.southLat,self.northLat),dtype=np.float)
         libcivet.plot_rivers_nc(self.map_overplot_rivers,
-                                center='Dateline',pen=(0,0,0),
+                                center='Dateline',
+                                pen=pg.mkPen(self.riverPenColor,
+                                width=self.riverPenWidth),
                                 xbounds=lonbounds,ybounds=latbounds)
 
     def plot_countries(self):
         lonbounds=np.asarray((self.westLon,self.eastLon),dtype=np.float)
         latbounds=np.asarray((self.southLat,self.northLat),dtype=np.float)
         libcivet.plot_countries_nc(self.map_overplot_countries,
-                                center='Dateline',pen=(0,0,0),
+                                center='Dateline',
+                                pen=pg.mkPen(self.countryPenColor,
+                                width=self.countryPenWidth),
                                 xbounds=lonbounds,ybounds=latbounds)
 
     def plot_states(self):
         lonbounds=np.asarray((self.westLon,self.eastLon),dtype=np.float)
         latbounds=np.asarray((self.southLat,self.northLat),dtype=np.float)
         libcivet.plot_states_nc(self.map_overplot_states,
-                                center='Dateline',pen=(0,0,0),
+                                center='Dateline',
+                                pen=pg.mkPen(self.statePenColor,
+                                width=self.statePenWidth),
                                 xbounds=lonbounds,ybounds=latbounds)
 
     def updateBilinearSmoothing(self):
@@ -793,7 +813,7 @@ class CivetGUI(pg.GraphicsWindow):
         xbounds=[np.min(self.time),np.max(self.time)]
         self.range_time_plot.setLimits(xMin=xbounds[0],xMax=xbounds[1])
 
-        lr = pg.LinearRegionItem(xbounds)
+        lr = pg.LinearRegionItem(xbounds,pen=pg.mkPen(width=5))
         lr.setOpacity(0.33)
         lr.setZValue(20)
         self.range_time_plot.plot(self.time,self.time,pen=None)
@@ -807,10 +827,11 @@ class CivetGUI(pg.GraphicsWindow):
         self.range_data_plot.showAxis('bottom',False)
         self.range_data_plot.showAxis('right',True)
         data=self.data[self.xTimeSeries,self.yTimeSeries,:]
-        ybounds=[np.min(self.data),np.max(self.data)]
+        ybounds=[self.mapGlobalMin,self.mapGlobalMax]
         self.range_data_plot.setLimits(yMin=ybounds[0],yMax=ybounds[1])
 
-        lr = pg.LinearRegionItem(ybounds,orientation='horizontal')
+        lr = pg.LinearRegionItem(ybounds,orientation='horizontal',
+                                 pen=pg.mkPen(width=5))
         lr.setOpacity(0.33)
         lr.setZValue(20)
         x=(np.min(data),np.max(data))
@@ -909,6 +930,7 @@ class CivetGUI(pg.GraphicsWindow):
         # swap time and longitude to give (lon,lat,time)
         self.data = np.swapaxes(self.data,0,2)
 
+        valid_data_ind=np.where(self.data < fillValue)
         # remove fill values
         if noFillValue:
             ind=np.where(self.data >= fillValue)
@@ -930,16 +952,16 @@ class CivetGUI(pg.GraphicsWindow):
         self.latMax = np.min((90.0,np.max((-90.0,np.max(self.lat)))))
 
         # set data limits
-        self.mapGlobalMin  = np.min(self.data)
-        self.mapGlobalMax  = np.max(self.data)
+        self.mapGlobalMin  = np.min(self.data[valid_data_ind])
+        self.mapGlobalMax  = np.max(self.data[valid_data_ind])
         self.mapCurrentMin  = self.mapGlobalMin
         self.mapCurrentMax  = self.mapGlobalMax
         self.contour_levels = (self.mapCurrentMin,self.mapCurrentMax)
 
         self.tsGlobalXMin = np.min(self.time)
         self.tsGlobalXMax = np.max(self.time)
-        self.tsGlobalYMin = np.min(self.data)
-        self.tsGlobalYMax = np.max(self.data)
+        self.tsGlobalYMin = np.min(self.data[valid_data_ind])
+        self.tsGlobalYMax = np.max(self.data[valid_data_ind])
         self.tsLocalYMin = np.min(self.data[self.xTimeSeries,self.yTimeSeries,:])
         self.tsLocalYMax = np.max(self.data[self.xTimeSeries,self.yTimeSeries,:])
         self.tsCurrentXMin = self.tsGlobalXMin
@@ -1117,7 +1139,9 @@ class CivetGUI(pg.GraphicsWindow):
         self.setTimeSeriesData()
         if clear:
             self.time_series_plot.clear()
-        self.time_series_plot.plot(self.tsTimeAll,self.tsDataAll,pen=(0,0,0))
+        #self.time_series_plot.plot(self.tsTimeAll,self.tsDataAll,pen=(0,0,0))
+        self.time_series_plot.plot(self.tsTimeAll,self.tsDataAll,
+                                   pen=pg.mkPen((0,0,0),width=self.tsPenWidth))
         self.ts_bot_left_axis.setLabel(self.yUnits)
         self.ts_bottom_axis.setLabel(self.xUnits)
         self.time_series_plot.showAxis('left',False)
