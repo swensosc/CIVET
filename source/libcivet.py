@@ -406,3 +406,74 @@ def plot_rivers_nc(PlotDataItem,pen=(0,0,0),center='Greenwich',
 
     PlotDataItem.setData(scoords,connect=psegs,pen=pen)
                     
+#--  synthesize seasonal cycle, mean, and trend to construct a time series
+
+def synth_seasonal(time,coefs):
+    # assumes time units are decimal year
+    omega = 2.0 * np.pi
+    tm = time.size
+    ncoefs=coefs.size
+    ts=np.zeros((tm))
+    if ncoefs == 2:
+        ts[:] = coefs[0] * np.cos(omega*time) + \
+            coefs[1] * np.sin(omega*time) 
+    if ncoefs == 4:
+        ts[:] = coefs[0] * np.cos(omega*time) + \
+            coefs[1] * np.sin(omega*time) + \
+            coefs[2] * 1.0 + \
+            coefs[3] * time
+    if ncoefs == 6:
+        ts[:] = coefs[0] * np.cos(omega*time) + \
+            coefs[1] * np.sin(omega*time) + \
+            coefs[2] * np.cos(2.0*omega*time) + \
+            coefs[3] * np.sin(2.0*omega*time) + \
+            coefs[4] * 1.0 + \
+            coefs[5] * time
+    return ts
+
+#--  fit seasonal cycle, mean, and trend to a time series
+def fit_seasonal(time,ts,ncoefs):
+
+    # assumes time units are decimal year
+    omega = 2.0 * np.pi
+
+    tm = time.size
+
+    # set up lsq matrix
+    g=np.zeros((tm,ncoefs))
+    if ncoefs == 2:
+        g[:,0]=np.cos(omega*time)
+        g[:,1]=np.sin(omega*time)
+    if ncoefs == 4:
+        g[:,0]=np.cos(omega*time)
+        g[:,1]=np.sin(omega*time)
+        g[:,2]=1.0
+        g[:,3]=time
+    if ncoefs == 6:
+        g[:,0]=np.cos(omega*time)
+        g[:,1]=np.sin(omega*time)
+        g[:,2]=np.cos(2.0*omega*time)
+        g[:,3]=np.sin(2.0*omega*time)
+        g[:,4]=1.0
+        g[:,5]=time
+
+    gtd = np.dot(np.transpose(g), ts)
+
+    gtg = np.dot(np.transpose(g), g)
+
+#  covm is the model covariance matrix
+    covm = np.linalg.inv(gtg)
+
+#  coefs is the model parameter vector
+    coefs=np.dot(covm, gtd)
+
+    '''
+    # check result
+    if ((np.max(ts) > 1.e-4) & (np.max(ts) < 1.e4)):
+        ts2=synth_seasonal(time,coefs)
+        plt.plot(time,ts,color='r')
+        plt.plot(time,ts2,color='b')
+        plt.show()
+    '''
+    return coefs
+

@@ -73,6 +73,10 @@ class CivetGUI(pg.GraphicsWindow):
 
         self.decimalTime = True
         
+        self.tsMean  = np.float(-999)
+        self.tsTrend = np.float(-999)
+        self.tsAmp   = np.float(-999)
+        
         self.lonMin = np.float(0)
         self.lonMax = np.float(360)
         self.latMin = np.float(-90)
@@ -101,6 +105,7 @@ class CivetGUI(pg.GraphicsWindow):
         self.doSelectRegion = False
 
         self.doAutoScaleUpdateXY = False
+        self.doTSDecomposition = False
 
     def WhatIsACivet(self):
         # a window created in the function closes after function call
@@ -400,6 +405,15 @@ class CivetGUI(pg.GraphicsWindow):
                 ]},
                 {'name': 'Restore Time Series Bounds', 'type': 'action'},
             ]},
+            {'name': 'Time Series Analysis', 'type': 'group', 'children': [
+                {'name': 'Calculate Decomposition', 'type': 'bool', 'value': False},
+                {'name': 'Mean', 'type': 'float', 'value': self.tsMean, 'readonly':True},
+                {'name': 'Trend','type': 'float', 'value': self.tsTrend, 'readonly':True},
+                {'name': 'Amplitude Annual Cycle','type': 'float', 'value': self.tsAmp, 'readonly':True},
+                {'name': 'Plot Mean', 'type': 'bool', 'value': False},
+                {'name': 'Plot Trend', 'type': 'bool', 'value': False},
+                {'name': 'Plot Annual Cycle', 'type': 'bool', 'value': False},
+            ]},
             {'name': 'Export Image', 'type': 'group', 'expanded': False, 'children': [
                 {'name': 'Map', 'type': 'bool', 'value':True},
                 {'name': 'Time Series', 'type': 'bool', 'value': True},
@@ -444,6 +458,8 @@ class CivetGUI(pg.GraphicsWindow):
         self.param_tree.param('Time Series View', 'Time Series Bounds','Max Y-Axis').sigValueChanged.connect(self.updateTsYMax)
         self.param_tree.param('Time Series View', 'Time Series Bounds','Min X-Axis').sigValueChanged.connect(self.updateTsXMin)
         self.param_tree.param('Time Series View', 'Time Series Bounds','Max X-Axis').sigValueChanged.connect(self.updateTsXMax)
+
+        self.param_tree.param('Time Series Analysis', 'Calculate Decomposition').sigValueChanged.connect(self.updateTSDecomposition)
 
         self.param_tree.param('Export Image', 'Export').sigActivated.connect(self.exportImage)
 
@@ -823,6 +839,28 @@ class CivetGUI(pg.GraphicsWindow):
         self.updateTsYMin
         self.updateTsYMax
         
+    def updateTSDecomposition(self):
+        if self.param_tree.param('Time Series Analysis', 'Calculate Decomposition').value():
+            self.doTSDecomposition = True
+        else:
+            self.doTSDecomposition = False
+            self.param_tree.param('Time Series Analysis', 'Mean').setValue(-999)
+            self.param_tree.param('Time Series Analysis', 'Trend').setValue(-999)
+            self.param_tree.param('Time Series Analysis', 'Amplitude Annual Cycle').setValue(-999)
+        
+    def calcTSDecomposition(self):
+        x=self.tsTime
+        y=self.tsData
+        ncoefs = 4
+        coefs=libcivet.fit_seasonal(x,y,ncoefs)
+        self.tsMean = np.mean(self.tsData)
+        self.tsTrend = coefs[3]
+        self.tsAmp = np.sqrt(np.power(coefs[0],2)+np.power(coefs[1],2))
+        self.param_tree.param('Time Series Analysis', 'Mean').setValue(self.tsMean)
+        self.param_tree.param('Time Series Analysis', 'Trend').setValue(self.tsTrend)
+        self.param_tree.param('Time Series Analysis', 'Amplitude Annual Cycle').setValue(self.tsAmp)
+        return coefs
+
     def createLUT(self):
         # create colormap (directly calling the cm object returns ndarray of RGBA)
         # the point of this is to extract the matplotlib colormap rgb
@@ -1101,6 +1139,21 @@ class CivetGUI(pg.GraphicsWindow):
 
         #self.scaleTimeSeriesAxes(rescale=True)
         self.updateTimeSeriesBounds()
+
+        # Overplot time series decomposition
+        if self.doTSDecomposition:
+            coefs = self.calcTSDecomposition()
+            tsMean = np.zeros((self.tsTimeAll.size)) ; tsMean[:]=self.tsMean
+            if self.param_tree.param('Time Series Analysis', 'Plot Mean').value():
+                self.time_series_plot.plot(self.tsTimeAll,tsMean,pen=(255,0,0))
+
+            tsTrend = np.zeros((self.tsTimeAll.size)) ; tsTrend[:]=self.tsTimeAll*coefs[3]+coefs[2]
+            if self.param_tree.param('Time Series Analysis', 'Plot Trend').value():
+                self.time_series_plot.plot(self.tsTimeAll,tsTrend,pen=(0,255,0))
+
+            tsAmp = np.zeros((self.tsTimeAll.size)) ; tsAmp[:]=libcivet.synth_seasonal(self.tsTimeAll,coefs)
+            if self.param_tree.param('Time Series Analysis', 'Plot Annual Cycle').value():
+                self.time_series_plot.plot(self.tsTimeAll,tsAmp,pen=(0,0,255))
 
     def setTimeSeriesData(self):
         self.tsDataAll=self.data[self.xTimeSeries,self.yTimeSeries,:]
