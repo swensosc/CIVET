@@ -52,6 +52,7 @@ class CivetGUI(pg.GraphicsWindow):
         self.readData(infile,decimalTime=self.decimalTime)
         self.create_colorbar(cbx=10,cby=256)
         self.plotMap()
+
         if self.param_tree.param('Map Annotation', 'Coastlines').value():
             self.plot_coastlines()
         self.addGlobalRange()
@@ -100,6 +101,7 @@ class CivetGUI(pg.GraphicsWindow):
         self.maxGaussWidth = 10
         self.bilinResMultiplier = 1
         self.maxBRMultiplier = 4
+        self.logTransform = False
 
         self.doSelectPoint = False
         self.doSelectRegion = False
@@ -381,14 +383,14 @@ class CivetGUI(pg.GraphicsWindow):
             {'name': 'Map View', 'type': 'group', 'children': [
                 {'name': 'Update Map', 'type': 'action'},
                 {'name': 'Map Scale', 'type': 'group', 'children': [
-                    {'name': 'Min', 'type': 'float', 'value': self.mapCurrentMin, 'default': self.mapGlobalMin},
                     {'name': 'Max', 'type': 'float', 'value': self.mapCurrentMax, 'default': self.mapGlobalMax},
+                    {'name': 'Min', 'type': 'float', 'value': self.mapCurrentMin, 'default': self.mapGlobalMin},
                 ]},
                 {'name': 'Map Bounds', 'type': 'group', 'children': [
-                    {'name': 'Min Longitude', 'type': 'float', 'value': self.westLon, 'default': self.lonMin},
                     {'name': 'Max Longitude', 'type': 'float', 'value': self.eastLon, 'default': self.lonMax},
-                    {'name': 'Min Latitude', 'type': 'float', 'value': self.southLat, 'default': self.latMin},
+                    {'name': 'Min Longitude', 'type': 'float', 'value': self.westLon, 'default': self.lonMin},
                     {'name': 'Max Latitude', 'type': 'float', 'value': self.northLat, 'default': self.latMax},
+                    {'name': 'Min Latitude', 'type': 'float', 'value': self.southLat, 'default': self.latMin},
                 ]},
                 {'name': 'Restore Map Bounds', 'type': 'action'},
             ]},
@@ -399,9 +401,12 @@ class CivetGUI(pg.GraphicsWindow):
                 {'name': 'US States', 'type': 'bool', 'value': False},
                 
             ]},
-            {'name': 'Map Smoothing', 'type': 'group', 'expanded': False, 'children': [
-                {'name': 'Bilinear', 'type': 'int', 'value': self.bilinResMultiplier, 'default': 1, 'limits': (1,self.maxBRMultiplier)},
-                {'name': 'Gaussian', 'type': 'int', 'value': self.gaussWidth, 'default': 0, 'limits': (0,self.maxGaussWidth)},
+            {'name': 'Data Transformations', 'type': 'group', 'expanded': False, 'children': [
+                {'name': 'Smoothing', 'type': 'group', 'expanded': False, 'children': [
+                    {'name': 'Bilinear', 'type': 'int', 'value': self.bilinResMultiplier, 'default': 1, 'limits': (1,self.maxBRMultiplier)},
+                    {'name': 'Gaussian', 'type': 'int', 'value': self.gaussWidth, 'default': 0, 'limits': (0,self.maxGaussWidth)},
+                ]},
+                {'name': 'Log', 'type': 'bool', 'value': False},
             ]},
             {'name': 'Time Series View', 'type': 'group', 'children': [
                 {'name': 'Update Time Series', 'type': 'action'},
@@ -410,10 +415,10 @@ class CivetGUI(pg.GraphicsWindow):
                     {'name': 'Y', 'type': 'int', 'value': self.yTimeSeries},
                 ]},
                 {'name': 'Time Series Bounds', 'type': 'group', 'children': [
-                    {'name': 'Min Y-Axis', 'type': 'float', 'value': self.tsCurrentYMin, 'default': self.tsGlobalYMin},
                     {'name': 'Max Y-Axis', 'type': 'float', 'value': self.tsCurrentYMax, 'default': self.tsGlobalYMax},
-                    {'name': 'Min X-Axis', 'type': 'float', 'value': self.tsCurrentXMin, 'default': self.tsGlobalXMin},
+                    {'name': 'Min Y-Axis', 'type': 'float', 'value': self.tsCurrentYMin, 'default': self.tsGlobalYMin},
                     {'name': 'Max X-Axis', 'type': 'float', 'value': self.tsCurrentXMax, 'default': self.tsGlobalXMax},
+                    {'name': 'Min X-Axis', 'type': 'float', 'value': self.tsCurrentXMin, 'default': self.tsGlobalXMin},
                 ]},
                 {'name': 'Restore Time Series Bounds', 'type': 'action'},
             ]},
@@ -459,8 +464,9 @@ class CivetGUI(pg.GraphicsWindow):
         self.param_tree.param('Map Annotation', 'Countries').sigValueChanged.connect(self.updateMapCountries)
         self.param_tree.param('Map Annotation', 'US States').sigValueChanged.connect(self.updateMapStates)
 
-        self.param_tree.param('Map Smoothing', 'Bilinear').sigValueChanged.connect(self.updateBilinearSmoothing)
-        self.param_tree.param('Map Smoothing', 'Gaussian').sigValueChanged.connect(self.updateGaussianSmoothing)
+        self.param_tree.param('Data Transformations', 'Smoothing', 'Bilinear').sigValueChanged.connect(self.updateBilinearSmoothing)
+        self.param_tree.param('Data Transformations', 'Smoothing', 'Gaussian').sigValueChanged.connect(self.updateGaussianSmoothing)
+        self.param_tree.param('Data Transformations', 'Log').sigValueChanged.connect(self.updateLogTransform)
 
         self.param_tree.param('Time Series View', 'Update Time Series').sigActivated.connect(self.updateTimeSeries)
         self.param_tree.param('Time Series View', 'Restore Time Series Bounds').sigActivated.connect(self.restoreTimeSeriesBounds)
@@ -741,12 +747,15 @@ class CivetGUI(pg.GraphicsWindow):
                                 xbounds=lonbounds,ybounds=latbounds)
 
     def updateBilinearSmoothing(self):
-        newVal = self.param_tree.param('Map Smoothing', 'Bilinear').value()
+        newVal = self.param_tree.param('Data Transformations', 'Smoothing', 'Bilinear').value()
         self.bilinResMultiplier = np.min((self.maxBRMultiplier,np.max((1,newVal))))
 
     def updateGaussianSmoothing(self):
-        newVal = self.param_tree.param('Map Smoothing', 'Gaussian').value()
+        newVal = self.param_tree.param('Data Transformations', 'Smoothing', 'Gaussian').value()
         self.gaussWidth = np.min((self.maxGaussWidth,np.max((0,newVal))))
+
+    def updateLogTransform(self):
+        self.logTransform = self.param_tree.param('Data Transformations', 'Log').value()
 
     def updateTimeSeries(self):
         # Update time series
@@ -1030,6 +1039,14 @@ class CivetGUI(pg.GraphicsWindow):
             fld = pg.gaussianFilter(self.mapData, (hwx,hwy))
             self.mapData = fld
         
+    def applyLogTransform(self):
+        # apply to absolute value of data
+        if self.logTransform:
+            fld = np.abs(np.copy(self.mapData))
+            ind=np.where(fld > 0)
+            fld[ind] = np.log(fld[ind])
+            self.mapData = fld
+        
     def plotMap(self,rescale=False):
         # Update contour levels
         self.contour_levels = (self.mapCurrentMin,self.mapCurrentMax)
@@ -1037,19 +1054,21 @@ class CivetGUI(pg.GraphicsWindow):
         # Rescale colorbar
         self.scale_colorbar(rescale=rescale)
         # Subset map image
-        self.setMapData(self.mapTime)
+        self.setMapData()
 
         # Apply Bilinear Interpolation
         self.applyBilinearInterpolation()
         # Apply Gaussian smoothing
         self.applyGaussian()
+        # Apply Logarithmic transform (to absolute value of data)
+        self.applyLogTransform()
 
         self.map_image.setLookupTable(self.lut)
         self.map_image.setImage(self.mapData,levels=self.contour_levels)        
 
         self.scale_map_boundaries(rescale=rescale)
 
-    def setMapData(self,t):
+    def setMapData(self):
         self.mapData=self.data[:,:,self.mapTime]
         self.mapLon=self.lon
         self.mapLat=self.lat
@@ -1068,11 +1087,10 @@ class CivetGUI(pg.GraphicsWindow):
             self.mapLonTrans = self.lonMin / self.mapLonScale
             self.mapLatScale = (self.latMax-self.latMin)/(self.mapLat.size-1)
             self.mapLatTrans = self.latMin / self.mapLatScale
-
             self.map_image.scale(self.mapLonScale,self.mapLatScale)
             self.map_image.translate(self.mapLonTrans,self.mapLatTrans)
-            self.vb_image.setXRange(self.westLon,self.eastLon)
-            self.vb_image.setYRange(self.southLat,self.northLat)
+            self.vb_image.setRange(yRange=[self.southLat,self.northLat],
+                                   xRange=[self.westLon, self.eastLon])
 
     def axisLength(self,axisItem):
         # return size in pixels of an axis
