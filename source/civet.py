@@ -501,11 +501,22 @@ class CivetGUI(pg.GraphicsWindow):
             pos = evt[0]  # using signal proxy turns original arguments into a tuple
             if self.vb_image.sceneBoundingRect().contains(pos):
                 mousePoint = self.vb_image.mapSceneToView(pos)
-                mx = np.int(mousePoint.x()/self.mapLonScale - self.mapLonTrans)
-                my = np.int(mousePoint.y()/self.mapLatScale - self.mapLatTrans)
+                nx = (mousePoint.x()/self.mapLonScale - self.mapLonTrans)
+                ny = (mousePoint.y()/self.mapLatScale - self.mapLatTrans)
+                # mapData may have changed resolution via "Data Transformations"
+                # so rescale indices to original data shape
+                if self.im != self.mapLon.shape[0]:
+                    mx = np.int(nx*np.float32(self.im)/np.float32(self.mapLon.shape[0]))
+                else:
+                    mx = np.int(nx)
+                if self.jm != self.mapLat.shape[0]:
+                    my = np.int(ny*np.float32(self.jm)/np.float32(self.mapLat.shape[0]))
+                else:
+                    my = np.int(ny)
+                # if indices within bounds, update time series
                 if np.logical_and((mx > 0 and mx < self.im),
                                   (my > 0 and my < self.jm)):
-                    self.top_data_label_right.setText("<span style='font-size: 12pt' style='color: black'>x=%0.1f,y=%0.1f,z=%0.1f</span>" % (self.mapLon[mx], self.mapLat[my],self.mapData[mx,my]))
+                    self.top_data_label_right.setText("<span style='font-size: 12pt' style='color: black'>x=%0.1f,y=%0.1f,z=%0.1f</span>" % (self.lon[mx], self.lat[my],self.mapData[mx,my]))
                     self.vLine_top.setPos(mousePoint.x())
                     self.hLine_top.setPos(mousePoint.y())
 
@@ -533,11 +544,22 @@ class CivetGUI(pg.GraphicsWindow):
             pos = evt[0].scenePos()
             if self.vb_image.sceneBoundingRect().contains(pos):
                 mousePoint = self.vb_image.mapSceneToView(pos)
-                mx = np.int(mousePoint.x()/self.mapLonScale - self.mapLonTrans)
-                my = np.int(mousePoint.y()/self.mapLatScale - self.mapLatTrans)
+                nx = (mousePoint.x()/self.mapLonScale - self.mapLonTrans)
+                ny = (mousePoint.y()/self.mapLatScale - self.mapLatTrans)
+                # mapData may have changed resolution via "Data Transformations"
+                # so rescale indices to original data shape
+                if self.im != self.mapLon.shape[0]:
+                    mx = np.int(nx*np.float32(self.im)/np.float32(self.mapLon.shape[0]))
+                else:
+                    mx = np.int(nx)
+                if self.jm != self.mapLat.shape[0]:
+                    my = np.int(ny*np.float32(self.jm)/np.float32(self.mapLat.shape[0]))
+                else:
+                    my = np.int(ny)
+                # if indices within bounds, update time series
                 if np.logical_and((mx > 0 and mx < self.im),(my > 0 and my < self.jm)):
                     self.xTimeSeries = mx
-                    self.yTimeSeries = my
+                    self.yTimeSeries = my                    
                     self.setTimeSeriesData()
                     # clear if left-clicked, overplot if right-clicked
                     if evt[0].button() > 1:
@@ -545,7 +567,7 @@ class CivetGUI(pg.GraphicsWindow):
                     else:
                         clear = True
                     self.plotTimeSeries(clear=clear)
-                    self.bottom_data_label_left.setText("<span style='font-size: 12pt' style='color: black'>lon=%0.2f,  lat=%0.2f</span>" % (self.mapLon[mx],self.mapLat[my]))
+                    self.bottom_data_label_left.setText("<span style='font-size: 12pt' style='color: black'>lon=%0.2f,  lat=%0.2f</span>" % (self.lon[mx],self.lat[my]))
 
     # Update top plot when mouse clicked in bottom plot
     # i.e. choose a time from the time series, and plot the map at that time
@@ -1031,6 +1053,10 @@ class CivetGUI(pg.GraphicsWindow):
             self.mapData = fld
             self.mapLon = blon
             self.mapLat = blat
+
+            #self.im=self.mapLon.shape[0]
+            #self.jm=self.mapLat.shape[0]
+
         
     def applyGaussian(self):
         if self.gaussWidth > 0:
