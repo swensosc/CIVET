@@ -77,6 +77,11 @@ class CivetGUI(pg.GraphicsWindow):
         self.tsMean  = np.float(-999)
         self.tsTrend = np.float(-999)
         self.tsAmp   = np.float(-999)
+
+        self.range_time_min = np.float(0)
+        self.range_time_max = np.float(1)
+        self.range_data_min = np.float(0)
+        self.range_data_max = np.float(1)
         
         self.lonMin = np.float(0)
         self.lonMax = np.float(360)
@@ -568,7 +573,7 @@ class CivetGUI(pg.GraphicsWindow):
                         clear = True
                     self.plotTimeSeries(clear=clear)
                     self.bottom_data_label_left.setText("<span style='font-size: 12pt' style='color: black'>lon=%0.2f,  lat=%0.2f</span>" % (self.lon[mx],self.lat[my]))
-
+                    
     # Update top plot when mouse clicked in bottom plot
     # i.e. choose a time from the time series, and plot the map at that time
     def mouseClickedTimeSeries(self,evt):
@@ -843,6 +848,8 @@ class CivetGUI(pg.GraphicsWindow):
         self.range_time_plot.showAxis('top',True)
         xbounds=[np.min(self.time),np.max(self.time)]
         self.range_time_plot.setLimits(xMin=xbounds[0],xMax=xbounds[1])
+        self.range_time_min = xbounds[0]
+        self.range_time_max = xbounds[1]
 
         lr = pg.LinearRegionItem(xbounds,pen=pg.mkPen(width=5))
         lr.setOpacity(0.33)
@@ -860,6 +867,8 @@ class CivetGUI(pg.GraphicsWindow):
         data=self.data[self.xTimeSeries,self.yTimeSeries,:]
         ybounds=[self.mapGlobalMin,self.mapGlobalMax]
         self.range_data_plot.setLimits(yMin=ybounds[0],yMax=ybounds[1])
+        self.range_data_min = ybounds[0]
+        self.range_data_max = ybounds[1]
 
         lr = pg.LinearRegionItem(ybounds,orientation='horizontal',
                                  pen=pg.mkPen(width=5))
@@ -877,6 +886,8 @@ class CivetGUI(pg.GraphicsWindow):
 
     def updateTimeRange(self):
         x=self.range_time_plot.items[1].getRegion()
+        self.range_time_min = x[0]
+        self.range_time_max = x[1]
         #update parameter tree values
         self.param_tree.param('Time Series View', 'Time Series Bounds','Min X-Axis').setValue(x[0])
         self.param_tree.param('Time Series View', 'Time Series Bounds','Max X-Axis').setValue(x[1])
@@ -885,6 +896,8 @@ class CivetGUI(pg.GraphicsWindow):
         
     def updateDataRange(self):
         x=self.range_data_plot.items[1].getRegion()
+        self.range_data_min = x[0]
+        self.range_data_max = x[1]
         #update parameter tree values
         self.param_tree.param('Time Series View', 'Time Series Bounds','Min Y-Axis').setValue(x[0])
         self.param_tree.param('Time Series View', 'Time Series Bounds','Max Y-Axis').setValue(x[1])
@@ -1196,10 +1209,20 @@ class CivetGUI(pg.GraphicsWindow):
         
         self.time_series_plot.disableAutoRange()
         self.time_series_plot.getViewBox().disableAutoRange()
+        '''
         self.time_series_plot.getViewBox().setLimits(xMin=self.tsGlobalXMin,
                                                      xMax=self.tsGlobalXMax,
                                                      yMin=self.tsGlobalYMin,
                                                      yMax=self.tsGlobalYMax)
+        '''
+        txmin=np.max([self.tsGlobalXMin,self.range_time_min])
+        txmax=np.min([self.tsGlobalXMax,self.range_time_max])
+        tymin=np.max([self.tsGlobalYMin,self.range_data_min])
+        tymax=np.min([self.tsGlobalYMax,self.range_data_max])
+        self.time_series_plot.getViewBox().setLimits(xMin=txmin,
+                                                     xMax=txmax,
+                                                     yMin=tymin,
+                                                     yMax=tymax)
 
         # need an intermediate function to get correct timing of button event
         # calls 
@@ -1226,6 +1249,8 @@ class CivetGUI(pg.GraphicsWindow):
     def setTimeSeriesData(self):
         self.tsDataAll=self.data[self.xTimeSeries,self.yTimeSeries,:]
         self.tsTimeAll=self.time
+        self.tsLocalYMin = np.min(self.tsDataAll)
+        self.tsLocalYMax = np.max(self.tsDataAll)
         # filter x-axis
         ind =np.where(np.logical_and((self.time >= self.tsCurrentXMin),(self.time <= self.tsCurrentXMax)))[0]
         self.tsData=self.data[self.xTimeSeries,self.yTimeSeries,ind]
