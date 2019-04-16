@@ -31,7 +31,7 @@ from pyqtgraph.graphicsItems.ROI import *
 #class CivetGUI(QtGui.QWidget):
 class CivetGUI(pg.GraphicsWindow):
     
-    def __init__(self,infile):
+    def __init__(self,infile,varname=None):
         #QtGui.QWidget.__init__(self)
         pg.GraphicsWindow.__init__(self)
 
@@ -41,7 +41,7 @@ class CivetGUI(pg.GraphicsWindow):
 
         self.addAttributes()
 
-        self.isField3D(infile)
+        self.isField3D(infile,varname=varname)
 
         self.setupGUI()
 
@@ -136,8 +136,9 @@ class CivetGUI(pg.GraphicsWindow):
         self.profCurrentXMin = self.profGlobalXMin
         self.profCurrentXMax = self.profGlobalXMax
 
-        self.doSelectPoint = False
-        self.doSelectRegion = False
+        self.doSelectPoint     = False
+        self.doSelectRegion    = False
+        self.doDragUpdateRange = False
 
         self.doAutoScaleUpdateXY = False
         self.doTSDecomposition = False
@@ -165,9 +166,12 @@ class CivetGUI(pg.GraphicsWindow):
         #self.wiac_window.show()
         logo_gv.show()
         
-    def isField3D(self,input_filename):
-        htag = 'clm2.h0'
-        self.varname=input_filename.split(htag)[-1].split('.')[1]
+    def isField3D(self,input_filename,varname=None):
+        if varname == None:
+            htag = 'clm2.h0'
+            self.varname=input_filename.split(htag)[-1].split('.')[1]
+        else:
+            self.varname = varname
 
         f1   = netcdf4.Dataset(input_filename, 'r')
         self.data = np.copy(f1.variables[self.varname])
@@ -267,6 +271,9 @@ class CivetGUI(pg.GraphicsWindow):
     
         self.colorbar = pg.ImageItem()
         self.vb_cbar.addItem(self.colorbar)
+
+        # connect slot to vb_image signal
+        self.vb_image.sigRangeChanged.connect(self.dragUpdateRange)
 
         # add axes to top layout
         self.colorbar_left_axis=pg.AxisItem('left')
@@ -448,7 +455,7 @@ class CivetGUI(pg.GraphicsWindow):
         from PIL import Image
         import os
         dir_path = os.path.dirname(os.path.realpath(__file__))
-        imgfile = dir_path +'/civet_woodcut.jpg'
+        imgfile = dir_path +'/../images/civet_woodcut.jpg'
         jpgfile = Image.open(imgfile)
         logo = np.array(jpgfile.getdata()).reshape(jpgfile.size[1],
                                                    jpgfile.size[0], 3)
@@ -652,16 +659,17 @@ class CivetGUI(pg.GraphicsWindow):
         return [(lonmin, lonmax),(latmin,latmax)]
 
     def dragUpdateRange(self):
-        x0=self.getViewRange()
-        x=x0[0]
-        y=x0[1]
-        self.updateMapBounds(x,y)
+        if self.doDragUpdateRange:
+            x0=self.getViewRange()
+            x=x0[0]
+            y=x0[1]
+            self.updateMapBounds(x,y)
 
     # mouse movement subroutines  --------------------------
         
     def mouseMovedMap(self,evt):
+        pos = evt[0]  # using signal proxy turns original arguments into a tuple
         if self.doSelectPoint:
-            pos = evt[0]  # using signal proxy turns original arguments into a tuple
             if self.vb_image.sceneBoundingRect().contains(pos):
                 mousePoint = self.vb_image.mapSceneToView(pos)
                 nx = (mousePoint.x()/self.mapLonScale - self.mapLonTrans)
@@ -682,14 +690,11 @@ class CivetGUI(pg.GraphicsWindow):
                     self.vLine_top.setPos(mousePoint.x())
                     self.hLine_top.setPos(mousePoint.y())
 
-        if self.doSelectRegion:
-            self.mapROI.sigRegionChanged.connect(self.updateMapBoundsFromROI)
-
-        pos = evt[0]  # using signal proxy turns original arguments into a tuple
+        # update bounding coordinates if map is panned
+        self.doDragUpdateRange = False
         if self.vb_image.sceneBoundingRect().contains(pos):
-# above two lines not orig
             if not self.doSelectPoint and not self.doSelectRegion:
-                self.vb_image.sigRangeChanged.connect(self.dragUpdateRange)
+                self.doDragUpdateRange = True
 
     def mouseMovedTimeSeries(self,evt):
         if self.doSelectPoint:
@@ -843,6 +848,7 @@ class CivetGUI(pg.GraphicsWindow):
             self.mapROI.setZValue(15)
             self.mapROI.addScaleHandle([0,1],[0.5,0.5])
             self.mapROI.addScaleHandle([1,0],[0.5,0.5])
+            self.mapROI.sigRegionChanged.connect(self.updateMapBoundsFromROI)
             self.vb_image.addItem(self.mapROI)
             self.doSelectRegion = True
         else:
@@ -852,9 +858,10 @@ class CivetGUI(pg.GraphicsWindow):
         self.doSelectRegion = False
         self.vb_image.removeItem(self.mapROI)
 
-    # map update subroutines  --------------------------
+    #-- map update subroutines  --------------------------
 
     def updateMap(self):
+        
         # Update map image and annotations
         if self.doSelectRegion:
             self.deselectRegion()
@@ -874,16 +881,17 @@ class CivetGUI(pg.GraphicsWindow):
         self.updateMapStates()
 
     def updateMapBoundsFromROI(self):
-        x=self.mapROI.getAffineSliceParams(self.mapData,self.map_image)
-        # x[0] is shape, x[2] is origin
-        x0 = np.int(x[2][0])
-        y0 = np.int(x[2][1])
-        x1 = x0 + np.int(x[0][0])
-        y1 = y0 + np.int(x[0][1])
-        #print self.mapLon[x0],self.mapLon[x1],self.mapLat[y0],self.mapLat[y1]
+        if self.doSelectRegion:
+            x=self.mapROI.getAffineSliceParams(self.mapData,self.map_image)
+            # x[0] is shape, x[2] is origin
+            x0 = np.int(x[2][0])
+            y0 = np.int(x[2][1])
+            x1 = x0 + np.int(x[0][0])
+            y1 = y0 + np.int(x[0][1])
+            #print self.mapLon[x0],self.mapLon[x1],self.mapLat[y0],self.mapLat[y1]
 
-        self.updateMapBounds((self.mapLon[x0],self.mapLon[x1]),
-                             (self.mapLat[y0],self.mapLat[y1]))
+            self.updateMapBounds((self.mapLon[x0],self.mapLon[x1]),
+                                 (self.mapLat[y0],self.mapLat[y1]))
 
     def updateMapBounds(self,x,y):
         #update parameter tree values
@@ -895,6 +903,8 @@ class CivetGUI(pg.GraphicsWindow):
         self.updateMapEastLon
         self.updateMapSouthLat
         self.updateMapNorthLat
+        #scs
+        #print 'updatemapbounds: ',self.param_tree.param('Map View', 'Map Bounds','Min Longitude').value(),self.param_tree.param('Map View', 'Map Bounds','Min Latitude').value()
 
     def restoreMapBounds(self):
         # Restore bounds to global values
@@ -1214,8 +1224,6 @@ class CivetGUI(pg.GraphicsWindow):
             self.readData2D(input_filename,noFillValue,decimalTime)
             
     def readData2D(self,input_filename,noFillValue=True,decimalTime=False):
-        htag = 'clm2.h0'
-        self.varname=input_filename.split(htag)[-1].split('.')[1]
 
         f1   = netcdf4.Dataset(input_filename, 'r')
         self.data = np.copy(f1.variables[self.varname])
@@ -1695,14 +1703,18 @@ class CivetGUI(pg.GraphicsWindow):
 parser = argparse.ArgumentParser(description='CIVET')
 parser.add_argument('input_filename', type=str, nargs='?',
                     help='input history file name')
-args = parser.parse_args()
-infile = args.input_filename
+parser.add_argument("--var", help="name of variable to plot",
+                    type=str,nargs=1,default=[None])
+
+args    = parser.parse_args()
+infile  = args.input_filename
+varname = args.var[0]
 
 if infile != None:
     pg.mkQApp()
 
     # create instantiation of class CivetGUI
-    win = CivetGUI(infile)
+    win = CivetGUI(infile,varname=varname)
 
     # read data from input file
     #win.Civet(infile)
