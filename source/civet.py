@@ -751,11 +751,13 @@ class CivetGUI(pg.GraphicsWindow):
                     if self.flag3d:
                         self.xProfile = mx
                         self.yProfile = my
+                        self.updateProfileLocation()
                         self.setProfileData()
                         self.plotProfile(clear=clear,rescale=True)
                     else:
                         self.xTimeSeries = mx
                         self.yTimeSeries = my
+                        self.updateTSLocation()
                         self.setTimeSeriesData()
                         self.plotTimeSeries(clear=clear)
 
@@ -903,8 +905,6 @@ class CivetGUI(pg.GraphicsWindow):
         self.updateMapEastLon
         self.updateMapSouthLat
         self.updateMapNorthLat
-        #scs
-        #print 'updatemapbounds: ',self.param_tree.param('Map View', 'Map Bounds','Min Longitude').value(),self.param_tree.param('Map View', 'Map Bounds','Min Latitude').value()
 
     def restoreMapBounds(self):
         # Restore bounds to global values
@@ -1032,6 +1032,10 @@ class CivetGUI(pg.GraphicsWindow):
         self.tsYMax = np.max(self.data[self.xProfile,self.yProfile,:])
         self.restoreTimeSeriesBounds()
 
+    def updateTSLocation(self):
+        self.param_tree.param('Time Series View', 'Time Series Location','X').setValue(self.xTimeSeries)
+        self.param_tree.param('Time Series View', 'Time Series Location','Y').setValue(self.yTimeSeries)
+        
     def updateTsYMin(self):
         newVal = self.param_tree.param('Time Series View', 'Time Series Bounds','Min Y-Axis').value()
         self.tsCurrentYMin = np.min((self.tsGlobalYMax,np.max((self.tsGlobalYMin,newVal))))
@@ -1064,6 +1068,10 @@ class CivetGUI(pg.GraphicsWindow):
         #    self.range_time_plot.items[1].setRegion((self.profGlobalXMin, self.profGlobalXMax))
         #if len(self.range_data_plot.items) > 0:
         #    self.range_data_plot.items[1].setRegion((self.profGlobalYMin, self.profGlobalYMax))
+        
+    def updateProfileLocation(self):
+        self.param_tree.param('Profile View', 'Profile Location','X').setValue(self.xProfile)
+        self.param_tree.param('Profile View', 'Profile Location','Y').setValue(self.yProfile)
         
     def updateXProfile(self):
         newVal = self.param_tree.param('Profile View', 'Profile Location','X').value()
