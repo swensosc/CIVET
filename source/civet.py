@@ -1097,8 +1097,13 @@ class CivetGUI(pg.GraphicsWindow):
 
     def exportImage(self):
         exportMap = self.param_tree.param('Export Image', 'Map').value()
-        exportTimeSeries = self.param_tree.param('Export Image', 'Time Series').value()
-        exportProfile = self.param_tree.param('Export Image', 'Profile').value()
+
+        exportProfile    = None
+        exportTimeSeries = None
+        if self.flag3d:
+            exportProfile    = self.param_tree.param('Export Image', 'Profile').value()
+        else:
+            exportTimeSeries = self.param_tree.param('Export Image', 'Time Series').value()
 
         if exportMap:
             exporter = pg.exporters.ImageExporter(self.top_layout)
