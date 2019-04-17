@@ -15,8 +15,7 @@ import libcivet
 '''
 
 # append path before importing pyqt libraries
-#libdir = '/project/tss/swensosc/pylibs/pyqtgraph/pyqtgraph-develop/pyqtgraph'
-libdir = '/project/tss/swensosc/pylibs/pyqtgraph/pyqtgraph-develop'
+libdir = './pyqtgraph/pyqtgraph-develop'
 sys.path.append(libdir)
 
 # import pyqtgraph libraries  --------------------------------------
